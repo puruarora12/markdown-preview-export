@@ -74,6 +74,57 @@ suite('Helpers Test Suite', () => {
             assert.ok(html.includes('<span class="hljs-variable language_">console</span>'));
         });
 
+        test('should render mermaid fences as diagram placeholders', () => {
+            const markdown = '```mermaid\ngraph TD\n  A-->B\n```';
+            const assetBase = 'file:///path/to/assets';
+            const html = getHtmlForWebview(markdown, false, assetBase);
+            assert.ok(html.includes('class="mermaid"'));
+            assert.ok(html.includes('graph TD'));
+            assert.ok(html.includes('A--&gt;B'));
+            assert.strictEqual(html.includes('hljs language-mermaid'), false);
+            assert.ok(html.includes('src="file:///path/to/assets/mermaid/mermaid.min.js"'));
+            assert.ok(html.includes('__mermaidReady'));
+            assert.ok(html.includes('securityLevel: \'strict\''));
+        });
+
+        test('should escape mermaid source', () => {
+            const markdown = '```mermaid\nA["<tag>"]\n```';
+            const html = getHtmlForWebview(markdown);
+            assert.ok(html.includes('&lt;tag&gt;'));
+            assert.strictEqual(html.includes('<tag>'), false);
+        });
+
+        test('should omit mermaid script when the document has no diagram', () => {
+            const html = getHtmlForWebview('# Hello', false, 'file:///path/to/assets');
+            assert.strictEqual(html.includes('mermaid.min.js'), false);
+            assert.strictEqual(html.includes('__mermaidReady'), false);
+        });
+
+        test('should force a light mermaid theme for PDF', () => {
+            const markdown = '```mermaid\ngraph TD\n  A-->B\n```';
+            const html = getHtmlForWebview(markdown, true, 'file:///path/to/assets');
+            assert.ok(html.includes('data-export="pdf"'));
+            assert.ok(html.includes('var light = true;'));
+            assert.ok(html.includes('htmlLabels: false'));
+            assert.ok(html.includes('theme: light ? \'default\' : \'dark\''));
+        });
+
+        test('should inline mermaid script instead of a vendor src', () => {
+            const markdown = '```mermaid\ngraph TD\n  A-->B\n```';
+            const html = getHtmlForWebview(
+                markdown,
+                false,
+                'file:///path/to/assets',
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                'window.__inlineMermaid = 1;'
+            );
+            assert.ok(html.includes('window.__inlineMermaid = 1;'));
+            assert.strictEqual(html.includes('mermaid/mermaid.min.js'), false);
+        });
+
         test('should use local vendor assets when assetBase is provided', () => {
             const assetBase = 'file:///path/to/assets';
             const html = getHtmlForWebview('# Hello', false, assetBase);

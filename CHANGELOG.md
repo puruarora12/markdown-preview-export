@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### New Features
+
+- **Mermaid Diagrams**: Fenced `mermaid` blocks render as diagrams in the enhanced preview, exported HTML, and PDF.
+
 ## [1.3.0](https://marketplace.visualstudio.com/items?itemName=nur-srijan.markdown-rich-preview&version=1.3.0) - 2026-06-30
 
 ### 🚀 New Features

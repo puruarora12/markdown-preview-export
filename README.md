@@ -27,6 +27,7 @@ A powerful VS Code extension that brings GitHub-style Markdown previews and one-
 - **Real-time Updates** - See changes instantly as you type
 - **Syntax Highlighting** - Beautiful code blocks with syntax highlighting
 - **Math Support** - Support for KaTeX math rendering
+- **Mermaid Diagrams** - Render ` ```mermaid ` fences in the enhanced preview, HTML export, and PDF
 - **Responsive Design** - Looks great on any device or screen size
 
 ## 🚀 Quick Start

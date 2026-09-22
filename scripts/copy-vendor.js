@@ -70,6 +70,18 @@ try {
   console.warn('katex not found, skipping copy');
 }
 
+try {
+  const mermaidPkg = require.resolve('mermaid/package.json');
+  const mermaidJs = path.join(path.dirname(mermaidPkg), 'dist', 'mermaid.min.js');
+  if (fs.existsSync(mermaidJs)) {
+    copyFileSync(mermaidJs, path.join(out, 'mermaid', 'mermaid.min.js'));
+  } else {
+    console.warn('mermaid.min.js not found at', mermaidJs);
+  }
+} catch (e) {
+  console.warn('mermaid not found, skipping copy');
+}
+
 console.log('Vendor copy complete');
 
 process.exit(0);
