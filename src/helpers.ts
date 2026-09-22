@@ -47,6 +47,66 @@ export function getChromeExecutableCandidates(): string[] {
     return [...envPaths, ...candidates].filter((p, idx, arr) => arr.indexOf(p) === idx);
 }
 
+function escapeHtml(value: string): string {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+function mermaidLibraryTag(vendor: string | undefined, inlineMermaidJs?: string): string {
+    if (inlineMermaidJs) {
+        const safe = inlineMermaidJs.replace(/<\/script/gi, '<\\/script');
+        return `<script>${safe}</script>`;
+    }
+    if (vendor) {
+        return `<script src="${vendor}/mermaid/mermaid.min.js"></script>`;
+    }
+    return '';
+}
+
+function mermaidBootScript(isForPdf: boolean): string {
+    const lightScript = isForPdf
+        ? 'var light = true;'
+        : `var isVSCode = document.body.classList.contains('vscode-light') || document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast');
+        var light = isVSCode ? document.body.classList.contains('vscode-light') : !window.matchMedia('(prefers-color-scheme: dark)').matches;`;
+
+    return `<script>
+window.renderMermaid = async function () {
+    try {
+        if (!window.mermaid) {
+            return;
+        }
+        var nodes = Array.prototype.slice.call(document.querySelectorAll('.mermaid'));
+        if (!nodes.length) {
+            return;
+        }
+        nodes.forEach(function (el) {
+            if (!el.dataset.source) {
+                el.dataset.source = el.textContent;
+            }
+            el.removeAttribute('data-processed');
+            el.textContent = el.dataset.source;
+        });
+        ${lightScript}
+        window.mermaid.initialize({
+            startOnLoad: false,
+            securityLevel: 'strict',
+            theme: light ? 'default' : 'dark',
+            htmlLabels: ${isForPdf ? 'false' : 'true'},
+            flowchart: { htmlLabels: ${isForPdf ? 'false' : 'true'} }
+        });
+        await window.mermaid.run({ nodes: nodes });
+    } catch (err) {
+        console.error(err);
+    } finally {
+        window.__mermaidReady = true;
+    }
+};
+${isForPdf ? 'window.renderMermaid();' : ''}
+</script>`;
+}
+
 
 export function getHtmlForWebview(
     markdownContent: string,
@@ -55,7 +115,8 @@ export function getHtmlForWebview(
     documentPath?: string,
     workspaceRoot?: string,
     imageResolver?: (href: string) => string,
-    cspSource?: string
+    cspSource?: string,
+    inlineMermaidJs?: string
 ): string {
     const marked = new Marked();
     const renderer = new marked.Renderer();
@@ -92,6 +153,9 @@ export function getHtmlForWebview(
 
     renderer.code = ({ text: code, lang: language }: { text: string, lang?: string }) => {
         const lang = language || 'plaintext';
+        if (lang.trim().split(/\s+/)[0].toLowerCase() === 'mermaid') {
+            return `<div class="mermaid-block"><div class="mermaid">${escapeHtml(code)}</div></div>`;
+        }
         try {
             const validLanguage = hljs.getLanguage(lang) ? lang : 'plaintext';
             const highlightedCode = hljs.highlight(code, { language: validLanguage }).value;
@@ -256,12 +320,17 @@ export function getHtmlForWebview(
         vendor = `file://${encodedPath.startsWith('/') ? '' : '/'}${encodedPath}`;
     }
 
+    const hasMermaid = htmlContent.includes('class="mermaid"');
+    const mermaidMarkup = hasMermaid
+        ? `${mermaidLibraryTag(vendor, inlineMermaidJs)}\n${mermaidBootScript(isForPdf)}`
+        : '';
+
     return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en"${isForPdf ? ' data-export="pdf"' : ''}>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${cspSource || '*'} 'self' data: https: file:; script-src ${cspSource || '*'} 'unsafe-inline'; style-src ${cspSource || '*'} 'unsafe-inline' https: file:; font-src ${cspSource || '*'} https: file:;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${cspSource || '*'} 'self' data: https: file:; script-src ${cspSource || '*'} 'unsafe-inline' 'unsafe-eval' file:; style-src ${cspSource || '*'} 'unsafe-inline' https: file:; font-src ${cspSource || '*'} https: file:;">
     <title>Markdown: Rich Preview</title>
     ${!isForPdf ? `
     <link id="highlight-css-light" rel="stylesheet" href="${vendor ? vendor + '/highlight/styles/github.min.css' : 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css'}" disabled>
@@ -325,6 +394,9 @@ export function getHtmlForWebview(
             .hljs {
                 background: #f6f8fa !important;
                 color: #24292e !important;
+            }
+            .mermaid-block {
+                page-break-inside: avoid;
             }
             hr {
                 page-break-after: auto;
@@ -628,10 +700,20 @@ export function getHtmlForWebview(
             color: var(--blockquote-fg);
             text-transform: uppercase;
         }
+        .mermaid-block {
+            display: flex;
+            justify-content: center;
+            margin: 1em 0;
+        }
+        .mermaid-block svg {
+            max-width: 100%;
+            height: auto;
+        }
     </style>
 </head>
 <body>
     ${htmlContent}
+    ${mermaidMarkup}
     ${!isForPdf ? `
     <script>
         function updateTheme() {
@@ -651,6 +733,9 @@ export function getHtmlForWebview(
             if (linkLight && linkDark) {
                 linkLight.disabled = !isLight;
                 linkDark.disabled = isLight;
+            }
+            if (window.renderMermaid) {
+                window.renderMermaid();
             }
         }
         

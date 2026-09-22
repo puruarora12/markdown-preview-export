@@ -224,7 +224,17 @@ export function activate(context: vscode.ExtensionContext) {
             const workspaceRoot = vscode.workspace.getWorkspaceFolder(editor.document.uri)?.uri.fsPath;
             // For exported HTML we can reference local files via file://
             const assetBaseForExport = `file://${path.join(context.extensionPath, 'assets', 'vendor')}`;
-            const htmlContent = getHtmlForWebview(markdownContent, false, assetBaseForExport, editor.document.fileName, workspaceRoot);
+            const inlineMermaidJs = readInlineMermaidBundle(markdownContent, context.extensionPath);
+            const htmlContent = getHtmlForWebview(
+                markdownContent,
+                false,
+                assetBaseForExport,
+                editor.document.fileName,
+                workspaceRoot,
+                undefined,
+                undefined,
+                inlineMermaidJs
+            );
 
             const defaultFileName = path.basename(editor.document.fileName, path.extname(editor.document.fileName)) + '.html';
             const uri = await vscode.window.showSaveDialog({
@@ -304,6 +314,14 @@ export function activate(context: vscode.ExtensionContext) {
                                 // Ignore timeout errors, proceed with what we have
                             }
 
+                            if (htmlContent.includes('class="mermaid"')) {
+                                try {
+                                    await page.waitForFunction('window.__mermaidReady === true', { timeout: 20000 });
+                                } catch (error) {
+                                    console.warn('Mermaid diagrams did not finish rendering before PDF export:', error);
+                                }
+                            }
+
                             const pdfBuffer = await page.pdf({
                                 format: 'A4',
                                 printBackground: true,
@@ -351,6 +369,20 @@ export function activate(context: vscode.ExtensionContext) {
     } catch (error) {
         console.error('Markdown Rich Preview & Export: activate() failed:', error);
         vscode.window.showErrorMessage(`Failed to activate Markdown Rich Preview & Export: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+
+function readInlineMermaidBundle(markdownContent: string, extensionPath: string): string | undefined {
+    if (!/(^|\n)[ ]{0,3}(`{3,}|~{3,})[ \t]*mermaid\b/i.test(markdownContent)) {
+        return undefined;
+    }
+
+    const mermaidBundlePath = path.join(extensionPath, 'assets', 'vendor', 'mermaid', 'mermaid.min.js');
+    try {
+        return fs.readFileSync(mermaidBundlePath, 'utf8');
+    } catch (error) {
+        vscode.window.showWarningMessage(`Mermaid bundle missing; exported HTML will not render diagrams. ${error instanceof Error ? error.message : String(error)}`);
+        return undefined;
     }
 }
 
